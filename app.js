@@ -5,7 +5,8 @@ const CONFIG = {
     // 請替換為您部署的Google Apps Script Web App URL
     GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwgKmu3FpmY2tb4FsCgdi6ms6dgbcna8W0J2NKdqBDRk-o2SLme7sMUhC2mZlYkP8bx/exec',
     // LINE Login重定向URI（必須在LINE Developers Console中設定）
-    REDIRECT_URI: window.location.origin + window.location.pathname
+    REDIRECT_URI: 'https://script.google.com/macros/s/AKfycbwgKmu3FpmY2tb4FsCgdi6ms6dgbcna8W0J2NKdqBDRk-o2SLme7sMUhC2mZlYkP8bx/exec'
+    //REDIRECT_URI: window.location.origin + window.location.pathname
 };
 
 // ===== 全域變數 =====
