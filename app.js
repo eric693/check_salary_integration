@@ -54,14 +54,16 @@ function lineLogin() {
     sessionStorage.setItem('line_login_state', state);
     sessionStorage.setItem('line_login_nonce', nonce);
     
-    // 構建LINE Login URL
+    // 構建LINE Login URL - 注意這裡不需要將 Channel ID 用引號包起來
     const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?` +
         `response_type=code` +
         `&client_id=${CONFIG.LINE_CHANNEL_ID}` +
         `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
         `&state=${state}` +
-        `&scope=profile%20openid%20email` +
+        `&scope=profile%20openid` +  // 移除 email，因為需要額外申請
         `&nonce=${nonce}`;
+    
+    console.log('LINE Login URL:', lineAuthUrl); // 調試用
     
     // 重定向到LINE登入頁面
     window.location.href = lineAuthUrl;
@@ -612,4 +614,50 @@ function showMessage(elementId, message, type) {
     setTimeout(() => {
         messageDiv.style.display = 'none';
     }, 5000);
+}
+
+async function handleLineCallback(code, state) {
+    showLoginLoading(true);
+    
+    console.log('處理 LINE 回調, code:', code, 'state:', state);
+    
+    // 驗證state
+    const savedState = sessionStorage.getItem('line_login_state');
+    console.log('保存的 state:', savedState);
+    
+    if (state !== savedState) {
+        console.error('State 驗證失敗');
+        showLoginMessage('登入驗證失敗，請重試', 'error');
+        showLoginLoading(false);
+        return;
+    }
+    
+    try {
+        // 呼叫後端驗證LINE登入
+        const response = await callGasFunction('verifyLineLogin', { code: code });
+        console.log('LINE 驗證響應:', response);
+        
+        if (response.success) {
+            currentUser = response.user;
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            
+            // 清理URL參數
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // 清理session storage
+            sessionStorage.removeItem('line_login_state');
+            sessionStorage.removeItem('line_login_nonce');
+            
+            // 顯示主系統
+            showMainSystem();
+        } else {
+            console.error('LINE 登入失敗:', response.message);
+            showLoginMessage(response.message || '登入失敗，請重試', 'error');
+            showLoginLoading(false);
+        }
+    } catch (error) {
+        console.error('LINE登入錯誤:', error);
+        showLoginMessage('登入過程發生錯誤：' + error.message, 'error');
+        showLoginLoading(false);
+    }
 }
