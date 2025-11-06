@@ -199,17 +199,22 @@ async function callGasFunction(functionName, params = {}) {
     try {
         console.log('呼叫 GAS 函數:', functionName, params);
         
+        // 對於不需要認證的 GET 請求，使用 JSONP
+        if (functionName === 'getEmployees' || functionName === 'getDepartments') {
+            return await callGasJsonp(functionName, params);
+        }
+        
+        // 對於需要 POST 的請求，使用 fetch
         const response = await fetch(CONFIG.GAS_WEB_APP_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain', // 使用 text/plain 避免 CORS 預檢
             },
             body: JSON.stringify({
                 function: functionName,
                 params: params,
                 user: currentUser
-            }),
-            mode: 'cors' // 允許跨域
+            })
         });
         
         if (!response.ok) {
@@ -223,6 +228,36 @@ async function callGasFunction(functionName, params = {}) {
         console.error('呼叫GAS函數錯誤:', error);
         throw error;
     }
+}
+
+// JSONP 方式呼叫 GAS（繞過 CORS）
+function callGasJsonp(functionName, params) {
+    return new Promise((resolve, reject) => {
+        const callbackName = 'jsonpCallback_' + Date.now();
+        const script = document.createElement('script');
+        
+        // 設置全局回調函數
+        window[callbackName] = function(data) {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            resolve(data);
+        };
+        
+        // 構建 URL
+        const url = CONFIG.GAS_WEB_APP_URL + 
+            '?callback=' + callbackName +
+            '&function=' + functionName +
+            '&params=' + encodeURIComponent(JSON.stringify(params));
+        
+        script.src = url;
+        script.onerror = function() {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('JSONP 請求失敗'));
+        };
+        
+        document.body.appendChild(script);
+    });
 }
 
 // ===== 日期時間更新 =====
