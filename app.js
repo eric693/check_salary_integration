@@ -1,12 +1,11 @@
 // ===== 配置設定 =====
 const CONFIG = {
-    // 請替換為您的LINE Login Channel ID
+    // LINE Login Channel ID
     LINE_CHANNEL_ID: '2008438482',
-    // 請替換為您部署的Google Apps Script Web App URL
+    // Google Apps Script Web App URL（後端 API）
     GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwgKmu3FpmY2tb4FsCgdi6ms6dgbcna8W0J2NKdqBDRk-o2SLme7sMUhC2mZlYkP8bx/exec',
-    // LINE Login重定向URI（必須在LINE Developers Console中設定）
-    REDIRECT_URI: 'https://script.google.com/macros/s/AKfycbwgKmu3FpmY2tb4FsCgdi6ms6dgbcna8W0J2NKdqBDRk-o2SLme7sMUhC2mZlYkP8bx/exec'
-    //REDIRECT_URI: window.location.origin + window.location.pathname
+    // LINE Login 重定向 URI（GitHub Pages URL）
+    REDIRECT_URI: 'https://eric693.github.io/check_salary_integration/'
 };
 
 // ===== 全域變數 =====
@@ -15,16 +14,17 @@ let employees = [];
 
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('頁面初始化開始');
+    
     // 檢查是否有LINE登入回傳的code
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
     
     if (code && state) {
-        // 處理LINE登入回傳
+        console.log('檢測到 LINE 回調參數');
         handleLineCallback(code, state);
     } else {
-        // 檢查是否已登入
         checkLoginStatus();
     }
     
@@ -35,18 +35,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // 設定預設月份
     const now = new Date();
     const currentMonth = now.toISOString().slice(0, 7);
-    document.getElementById('salaryMonth').value = currentMonth;
-    document.getElementById('reportMonth').value = currentMonth;
+    const salaryMonthEl = document.getElementById('salaryMonth');
+    const reportMonthEl = document.getElementById('reportMonth');
+    if (salaryMonthEl) salaryMonthEl.value = currentMonth;
+    if (reportMonthEl) reportMonthEl.value = currentMonth;
     
     // 設定預設日期範圍（本月）
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    document.getElementById('attendanceStartDate').value = firstDay.toISOString().slice(0, 10);
-    document.getElementById('attendanceEndDate').value = lastDay.toISOString().slice(0, 10);
+    const startDateEl = document.getElementById('attendanceStartDate');
+    const endDateEl = document.getElementById('attendanceEndDate');
+    if (startDateEl) startDateEl.value = firstDay.toISOString().slice(0, 10);
+    if (endDateEl) endDateEl.value = lastDay.toISOString().slice(0, 10);
 });
 
 // ===== LINE 登入功能 =====
 function lineLogin() {
+    console.log('開始 LINE 登入流程');
     const state = generateRandomString(16);
     const nonce = generateRandomString(16);
     
@@ -54,16 +59,18 @@ function lineLogin() {
     sessionStorage.setItem('line_login_state', state);
     sessionStorage.setItem('line_login_nonce', nonce);
     
-    // 構建LINE Login URL - 注意這裡不需要將 Channel ID 用引號包起來
-    const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?` +
-        `response_type=code` +
-        `&client_id=${CONFIG.LINE_CHANNEL_ID}` +
-        `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
-        `&state=${state}` +
-        `&scope=profile%20openid` +  // 移除 email，因為需要額外申請
-        `&nonce=${nonce}`;
+    // 使用 URLSearchParams 構建參數
+    const params = new URLSearchParams({
+        'response_type': 'code',
+        'client_id': CONFIG.LINE_CHANNEL_ID,
+        'redirect_uri': CONFIG.REDIRECT_URI,
+        'state': state,
+        'scope': 'profile openid',
+        'nonce': nonce
+    });
     
-    console.log('LINE Login URL:', lineAuthUrl); // 調試用
+    const lineAuthUrl = 'https://access.line.me/oauth2/v2.1/authorize?' + params.toString();
+    console.log('LINE Login URL:', lineAuthUrl);
     
     // 重定向到LINE登入頁面
     window.location.href = lineAuthUrl;
@@ -80,10 +87,14 @@ function generateRandomString(length) {
 
 async function handleLineCallback(code, state) {
     showLoginLoading(true);
+    console.log('處理 LINE 回調, code:', code, 'state:', state);
     
     // 驗證state
     const savedState = sessionStorage.getItem('line_login_state');
+    console.log('保存的 state:', savedState);
+    
     if (state !== savedState) {
+        console.error('State 驗證失敗');
         showLoginMessage('登入驗證失敗，請重試', 'error');
         showLoginLoading(false);
         return;
@@ -92,6 +103,7 @@ async function handleLineCallback(code, state) {
     try {
         // 呼叫後端驗證LINE登入
         const response = await callGasFunction('verifyLineLogin', { code: code });
+        console.log('LINE 驗證響應:', response);
         
         if (response.success) {
             // 登入成功，保存用戶資訊
@@ -108,12 +120,13 @@ async function handleLineCallback(code, state) {
             // 顯示主系統
             showMainSystem();
         } else {
+            console.error('LINE 登入失敗:', response.message);
             showLoginMessage(response.message || '登入失敗，請重試', 'error');
             showLoginLoading(false);
         }
     } catch (error) {
         console.error('LINE登入錯誤:', error);
-        showLoginMessage('登入過程發生錯誤，請重試', 'error');
+        showLoginMessage('登入過程發生錯誤：' + error.message, 'error');
         showLoginLoading(false);
     }
 }
@@ -129,18 +142,26 @@ function checkLoginStatus() {
 }
 
 function showLoginPage() {
-    document.getElementById('loginPage').style.display = 'flex';
-    document.getElementById('mainSystem').style.display = 'none';
+    const loginPage = document.getElementById('loginPage');
+    const mainSystem = document.getElementById('mainSystem');
+    if (loginPage) loginPage.style.display = 'flex';
+    if (mainSystem) mainSystem.style.display = 'none';
 }
 
 function showMainSystem() {
-    document.getElementById('loginPage').style.display = 'none';
-    document.getElementById('mainSystem').style.display = 'block';
+    const loginPage = document.getElementById('loginPage');
+    const mainSystem = document.getElementById('mainSystem');
+    if (loginPage) loginPage.style.display = 'none';
+    if (mainSystem) mainSystem.style.display = 'block';
     
     // 更新用戶資訊顯示
-    document.getElementById('userName').textContent = currentUser.name;
-    document.getElementById('userRole').textContent = currentUser.role || '員工';
-    document.getElementById('userAvatar').src = currentUser.picture || 'https://via.placeholder.com/50';
+    const userNameEl = document.getElementById('userName');
+    const userRoleEl = document.getElementById('userRole');
+    const userAvatarEl = document.getElementById('userAvatar');
+    
+    if (userNameEl) userNameEl.textContent = currentUser.name;
+    if (userRoleEl) userRoleEl.textContent = currentUser.role || '員工';
+    if (userAvatarEl) userAvatarEl.src = currentUser.picture || 'https://via.placeholder.com/50';
     
     // 載入初始數據
     loadEmployees();
@@ -148,11 +169,14 @@ function showMainSystem() {
 }
 
 function showLoginLoading(show) {
-    document.getElementById('loginLoading').style.display = show ? 'block' : 'none';
+    const loadingEl = document.getElementById('loginLoading');
+    if (loadingEl) loadingEl.style.display = show ? 'block' : 'none';
 }
 
 function showLoginMessage(message, type) {
     const messageDiv = document.getElementById('loginMessage');
+    if (!messageDiv) return;
+    
     messageDiv.textContent = message;
     messageDiv.className = `message ${type}`;
     messageDiv.style.display = 'block';
@@ -173,6 +197,8 @@ function logout() {
 // ===== Google Apps Script 通訊 =====
 async function callGasFunction(functionName, params = {}) {
     try {
+        console.log('呼叫 GAS 函數:', functionName, params);
+        
         const response = await fetch(CONFIG.GAS_WEB_APP_URL, {
             method: 'POST',
             headers: {
@@ -182,14 +208,16 @@ async function callGasFunction(functionName, params = {}) {
                 function: functionName,
                 params: params,
                 user: currentUser
-            })
+            }),
+            mode: 'cors' // 允許跨域
         });
         
         if (!response.ok) {
-            throw new Error('網路請求失敗');
+            throw new Error('網路請求失敗: ' + response.status);
         }
         
         const data = await response.json();
+        console.log('GAS 響應:', data);
         return data;
     } catch (error) {
         console.error('呼叫GAS函數錯誤:', error);
@@ -272,10 +300,16 @@ async function clockOut() {
 
 function updateClockStatus(data) {
     if (data) {
-        document.getElementById('clockStatus').style.display = 'block';
-        document.getElementById('lastClockTime').textContent = data.time || '-';
-        document.getElementById('lastClockType').textContent = data.type || '-';
-        document.getElementById('todayHours').textContent = data.hours || '0';
+        const statusEl = document.getElementById('clockStatus');
+        if (statusEl) statusEl.style.display = 'block';
+        
+        const timeEl = document.getElementById('lastClockTime');
+        const typeEl = document.getElementById('lastClockType');
+        const hoursEl = document.getElementById('todayHours');
+        
+        if (timeEl) timeEl.textContent = data.time || '-';
+        if (typeEl) typeEl.textContent = data.type || '-';
+        if (hoursEl) hoursEl.textContent = data.hours || '0';
     }
 }
 
@@ -333,17 +367,23 @@ async function loadEmployees() {
             displayEmployees(employees);
             updateEmployeeSelects(employees);
         } else {
-            document.getElementById('employeeTableBody').innerHTML = 
-                '<tr><td colspan="6" style="text-align: center; color: #f56565;">載入失敗</td></tr>';
+            const tbody = document.getElementById('employeeTableBody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f56565;">載入失敗</td></tr>';
+            }
         }
     } catch (error) {
-        document.getElementById('employeeTableBody').innerHTML = 
-            '<tr><td colspan="6" style="text-align: center; color: #f56565;">載入失敗</td></tr>';
+        console.error('載入員工失敗:', error);
+        const tbody = document.getElementById('employeeTableBody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #f56565;">載入失敗</td></tr>';
+        }
     }
 }
 
 function displayEmployees(employeeList) {
     const tbody = document.getElementById('employeeTableBody');
+    if (!tbody) return;
     
     if (!employeeList || employeeList.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">目前沒有員工資料</td></tr>';
@@ -372,6 +412,8 @@ function updateEmployeeSelects(employeeList) {
     ];
     
     selects.forEach(select => {
+        if (!select) return;
+        
         const currentValue = select.value;
         const firstOption = select.options[0].outerHTML;
         
@@ -404,8 +446,7 @@ async function deleteEmployee(employeeId) {
     }
 }
 
-async function editEmployee(employeeId) {
-    // 這裡可以實作編輯功能，為了簡化先用alert提示
+function editEmployee(employeeId) {
     alert('編輯功能：請在新增員工區修改資料後重新新增，或在試算表中直接編輯');
 }
 
@@ -442,16 +483,25 @@ async function calculateSalary() {
 }
 
 function displaySalaryResult(data) {
-    document.getElementById('salaryResult').style.display = 'block';
-    document.getElementById('resultName').textContent = data.name;
-    document.getElementById('resultMonth').textContent = data.month;
-    document.getElementById('resultBaseSalary').textContent = Number(data.baseSalary).toLocaleString();
-    document.getElementById('resultRequiredDays').textContent = data.requiredDays;
-    document.getElementById('resultActualDays').textContent = data.actualDays;
-    document.getElementById('resultTotalHours').textContent = data.totalHours.toFixed(1);
-    document.getElementById('resultOvertimePay').textContent = Number(data.overtimePay).toLocaleString();
-    document.getElementById('resultDeduction').textContent = Number(data.deduction).toLocaleString();
-    document.getElementById('resultNetSalary').textContent = Number(data.netSalary).toLocaleString();
+    const resultEl = document.getElementById('salaryResult');
+    if (resultEl) resultEl.style.display = 'block';
+    
+    const fields = {
+        'resultName': data.name,
+        'resultMonth': data.month,
+        'resultBaseSalary': Number(data.baseSalary).toLocaleString(),
+        'resultRequiredDays': data.requiredDays,
+        'resultActualDays': data.actualDays,
+        'resultTotalHours': data.totalHours.toFixed(1),
+        'resultOvertimePay': Number(data.overtimePay).toLocaleString(),
+        'resultDeduction': Number(data.deduction).toLocaleString(),
+        'resultNetSalary': Number(data.netSalary).toLocaleString()
+    };
+    
+    Object.keys(fields).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = fields[id];
+    });
 }
 
 // ===== 出勤記錄查詢 =====
@@ -485,6 +535,7 @@ async function queryAttendance() {
 
 function displayAttendanceRecords(records) {
     const tbody = document.getElementById('attendanceTableBody');
+    if (!tbody) return;
     
     if (!records || records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">查無資料</td></tr>';
@@ -533,6 +584,7 @@ async function generateReport() {
 
 function displayReport(reportData) {
     const tbody = document.getElementById('reportTableBody');
+    if (!tbody) return;
     
     if (!reportData || reportData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999;">查無資料</td></tr>';
@@ -583,6 +635,8 @@ async function loadDepartments() {
         
         if (response.success) {
             const select = document.getElementById('reportDepartment');
+            if (!select) return;
+            
             const firstOption = select.options[0].outerHTML;
             select.innerHTML = firstOption + response.data.map(dept => 
                 `<option value="${dept}">${dept}</option>`
@@ -601,12 +655,15 @@ function switchTab(tabName) {
     
     // 添加active class到選中的標籤
     event.target.classList.add('active');
-    document.getElementById(tabName + 'Tab').classList.add('active');
+    const tabContent = document.getElementById(tabName + 'Tab');
+    if (tabContent) tabContent.classList.add('active');
 }
 
 // ===== 通用訊息顯示 =====
 function showMessage(elementId, message, type) {
     const messageDiv = document.getElementById(elementId);
+    if (!messageDiv) return;
+    
     messageDiv.textContent = message;
     messageDiv.className = `message ${type}`;
     messageDiv.style.display = 'block';
@@ -614,50 +671,4 @@ function showMessage(elementId, message, type) {
     setTimeout(() => {
         messageDiv.style.display = 'none';
     }, 5000);
-}
-
-async function handleLineCallback(code, state) {
-    showLoginLoading(true);
-    
-    console.log('處理 LINE 回調, code:', code, 'state:', state);
-    
-    // 驗證state
-    const savedState = sessionStorage.getItem('line_login_state');
-    console.log('保存的 state:', savedState);
-    
-    if (state !== savedState) {
-        console.error('State 驗證失敗');
-        showLoginMessage('登入驗證失敗，請重試', 'error');
-        showLoginLoading(false);
-        return;
-    }
-    
-    try {
-        // 呼叫後端驗證LINE登入
-        const response = await callGasFunction('verifyLineLogin', { code: code });
-        console.log('LINE 驗證響應:', response);
-        
-        if (response.success) {
-            currentUser = response.user;
-            localStorage.setItem('user', JSON.stringify(currentUser));
-            
-            // 清理URL參數
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            // 清理session storage
-            sessionStorage.removeItem('line_login_state');
-            sessionStorage.removeItem('line_login_nonce');
-            
-            // 顯示主系統
-            showMainSystem();
-        } else {
-            console.error('LINE 登入失敗:', response.message);
-            showLoginMessage(response.message || '登入失敗，請重試', 'error');
-            showLoginLoading(false);
-        }
-    } catch (error) {
-        console.error('LINE登入錯誤:', error);
-        showLoginMessage('登入過程發生錯誤：' + error.message, 'error');
-        showLoginLoading(false);
-    }
 }
