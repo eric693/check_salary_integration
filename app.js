@@ -1,9 +1,9 @@
 // ===== 配置設定 =====
 const CONFIG = {
     // 請替換為您的LINE Login Channel ID
-    LINE_CHANNEL_ID: 'YOUR_LINE_CHANNEL_ID',
+    LINE_CHANNEL_ID: '2008438482',
     // 請替換為您部署的Google Apps Script Web App URL
-    GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbyz1I_c7pJDKmm0m4OKa8fVLe4xjHcMHRW3MuOBj8zWBNlvBnDnY6P4YODd7-RFs7FL/exec',
+    GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwgKmu3FpmY2tb4FsCgdi6ms6dgbcna8W0J2NKdqBDRk-o2SLme7sMUhC2mZlYkP8bx/exec',
     // LINE Login重定向URI（必須在LINE Developers Console中設定）
     REDIRECT_URI: window.location.origin + window.location.pathname
 };
